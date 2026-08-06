@@ -8,4 +8,8 @@
  *
  * 🟢 You can import this file directly.
  */
+export type * from './models/User'
+export type * from './models/Portfolio'
+export type * from './models/Holding'
+export type * from './models/Transaction'
 export type * from './commonInputTypes'
