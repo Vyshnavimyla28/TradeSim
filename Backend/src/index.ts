@@ -100,3 +100,62 @@ app.get('/portfolio/me', authenticateToken, async (req: AuthRequest, res) => {
   });
   res.json(portfolio);
 });
+app.post('/trades/buy', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { symbol, quantity, price } = req.body;
+
+    if (!symbol || !quantity || !price || quantity <= 0 || price <= 0) {
+      return res.status(400).json({ error: 'Valid symbol, quantity, and price are required' });
+    }
+
+    const portfolio = await prisma.portfolio.findUnique({ where: { userId: req.userId } });
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    const cost = quantity * price;
+    if (cost > portfolio.cashBalance) {
+      return res.status(400).json({ error: 'Insufficient cash balance' });
+    }
+
+    // Run as a transaction: all steps succeed together, or none do
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Deduct cash
+      const updatedPortfolio = await tx.portfolio.update({
+        where: { id: portfolio.id },
+        data: { cashBalance: portfolio.cashBalance - cost },
+      });
+
+      // 2. Update or create holding
+      const existingHolding = await tx.holding.findFirst({
+        where: { portfolioId: portfolio.id, symbol },
+      });
+
+      if (existingHolding) {
+        const newQuantity = existingHolding.quantity + quantity;
+        const newAvgPrice =
+          (existingHolding.avgBuyPrice * existingHolding.quantity + cost) / newQuantity;
+        await tx.holding.update({
+          where: { id: existingHolding.id },
+          data: { quantity: newQuantity, avgBuyPrice: newAvgPrice },
+        });
+      } else {
+        await tx.holding.create({
+          data: { portfolioId: portfolio.id, symbol, quantity, avgBuyPrice: price },
+        });
+      }
+
+      // 3. Log transaction
+      await tx.transaction.create({
+        data: { portfolioId: portfolio.id, symbol, type: 'BUY', quantity, price },
+      });
+
+      return updatedPortfolio;
+    });
+
+    res.json({ message: 'Buy order executed', cashBalance: result.cashBalance });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
