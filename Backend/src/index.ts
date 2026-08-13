@@ -214,3 +214,31 @@ app.post('/trades/sell', authenticateToken, async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Something went wrong' });
   }
 });
+app.get('/market/quote/:symbol', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { symbol } = req.params;
+    const apiKey = process.env.FINNHUB_API_KEY;
+
+    const response = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`
+    );
+    const data = await response.json();
+
+    if (!data || data.c === undefined) {
+      return res.status(404).json({ error: 'Symbol not found' });
+    }
+
+    res.json({
+      symbol,
+      currentPrice: data.c,
+      change: data.d,
+      percentChange: data.dp,
+      high: data.h,
+      low: data.l,
+      previousClose: data.pc,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch market data' });
+  }
+});
