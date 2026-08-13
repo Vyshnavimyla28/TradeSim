@@ -242,3 +242,21 @@ app.get('/market/quote/:symbol', authenticateToken, async (req: AuthRequest, res
     res.status(500).json({ error: 'Failed to fetch market data' });
   }
 });
+app.get('/transactions', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const portfolio = await prisma.portfolio.findUnique({ where: { userId: req.userId } });
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where: { portfolioId: portfolio.id },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    res.json(transactions);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
