@@ -159,3 +159,58 @@ app.post('/trades/buy', authenticateToken, async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Something went wrong' });
   }
 });
+app.post('/trades/sell', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { symbol, quantity, price } = req.body;
+
+    if (!symbol || !quantity || !price || quantity <= 0 || price <= 0) {
+      return res.status(400).json({ error: 'Valid symbol, quantity, and price are required' });
+    }
+
+    const portfolio = await prisma.portfolio.findUnique({ where: { userId: req.userId } });
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+
+    const holding = await prisma.holding.findFirst({
+      where: { portfolioId: portfolio.id, symbol },
+    });
+
+    if (!holding || holding.quantity < quantity) {
+      return res.status(400).json({ error: 'Insufficient shares to sell' });
+    }
+
+    const proceeds = quantity * price;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Add cash from sale
+      const updatedPortfolio = await tx.portfolio.update({
+        where: { id: portfolio.id },
+        data: { cashBalance: portfolio.cashBalance + proceeds },
+      });
+
+      // 2. Reduce or remove holding
+      const remainingQuantity = holding.quantity - quantity;
+      if (remainingQuantity === 0) {
+        await tx.holding.delete({ where: { id: holding.id } });
+      } else {
+        await tx.holding.update({
+          where: { id: holding.id },
+          data: { quantity: remainingQuantity },
+        });
+      }
+
+      // 3. Log transaction
+      await tx.transaction.create({
+        data: { portfolioId: portfolio.id, symbol, type: 'SELL', quantity, price },
+      });
+
+      return updatedPortfolio;
+    });
+
+    res.json({ message: 'Sell order executed', cashBalance: result.cashBalance });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
