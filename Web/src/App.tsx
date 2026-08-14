@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Dashboard from './pages/Dashboard';
+import Trade from './pages/Trade';
 
 function App() {
   return (
@@ -8,7 +10,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<div className="min-h-screen bg-slate-900 text-white p-8">Dashboard coming soon</div>} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/trade" element={<Trade />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
